@@ -1,0 +1,308 @@
+---
+title: "Stat 183 Project"
+author: "Daniel Han"
+date: "4/16/2022"
+output: html_document
+---
+
+```{r}
+#clear Variables
+rm(list=ls())
+```
+
+
+```{r}
+library(tidyverse)
+library(car)
+library(emmeans)
+library(MASS)
+library(faraway)
+```
+
+
+```{r}
+raw_data <- read.csv(file.choose())
+raw_data
+```
+```{r}
+#clean the data by dropping unneed columns to make the table more clean
+
+Clean_data<- subset(raw_data, select = -c(Males  ,Females,
+                                          Males.1,Females.1,
+                                          Males.2,Females.2, 
+                                          Males.3,Females.3,
+                                          Males.4,Females.4,
+                                          Males.5,Females.5) )
+
+Clean_data[Clean_data == '.'] <- NA #replacing "." with "NA"
+
+
+
+Clean_data
+attach(Clean_data)
+```
+
+```{r}
+#Descriptive Analysis
+
+#Treatment types
+Trt_table <- table(Trt)
+pie(Trt_table, labels = Trt_table , main = 'Treatment Types' , col = rainbow(3))
+legend(.9, .1, c("BW","V","W"), cex = 1, fill = rainbow(3))
+
+#finding percentage for variable
+Trt_percent =c(Trt_table[1:length(Trt_table)]/sum(Trt_table)*100)
+Trt_percent = format(round(Trt_percent, 3), nsmall = 2)
+
+#adding percentage and freq to a single table
+total <- rbind(Trt_table, Trt_percent)
+total
+
+
+
+#Longevity
+#separating the data by treatment)
+BW_only <- c(filter(Clean_data, Trt == "BW"))
+V_only  <- c(filter(Clean_data, Trt == "V"))
+W_only  <- c(filter(Clean_data, Trt == "W"))
+
+
+
+label=c("All TRT","BW","V","W") # labels for Axis
+boxplot(Longevity,BW_only$Longevity,V_only$Longevity,W_only$Longevity, 
+        main = 'Longevity Comparison',
+        names=label)
+
+
+
+#Total Offspring
+label=c("All TRT","BW","V","W") # labels for Axis
+boxplot(Total.offspring,BW_only$Total.offspring,V_only$Total.offspring,W_only$Total.offspring, 
+        main = 'Total Offspring Comparison',
+        names=label)
+
+```
+
+
+```{r}
+#remove na in r - remove rows - na.omit function / option
+Clean_data1 <- na.omit(Clean_data) 
+
+attach(Clean_data1)
+```
+
+```{r}
+#Descriptive Analysis
+
+BW_only <- c(filter(Clean_data1, Trt == "BW"))
+V_only  <- c(filter(Clean_data1, Trt == "V"))
+W_only  <- c(filter(Clean_data1, Trt == "W"))
+
+#Total Males Offspring
+total_m  <- as.integer(Clean_data1$Total.males)
+BW_only_m <- as.integer(BW_only$Total.males)
+V_only_m  <- as.integer(V_only$Total.males)
+W_only_m  <- as.integer(W_only$Total.males)
+
+label=c('All TRT',"BW","V","W") # labels for Axis
+boxplot(total_m,BW_only_m,V_only_m,W_only_m, 
+        main = 'Total Male Offspring Comparison',
+        names=label)
+
+#Total Females Offspring
+total_f  <- as.integer(Clean_data1$Total.females)
+BW_only_f <- as.integer(BW_only$Total.females)
+V_only_f <- as.integer(V_only$Total.females)
+W_only_f  <- as.integer(W_only$Total.females)
+                   
+label=c('All TRT',"BW","V","W") # labels for Axis
+boxplot(total_f,BW_only_f,V_only_f,W_only_f, 
+        main = 'Total Female Offspring Comparison',
+        names=label)
+
+
+
+#Sex ratio
+total_s  <- as.integer(Clean_data1$Sex.ratio)
+BW_only_s <- as.integer(BW_only$Sex.ratio)
+V_only_s <- as.integer(V_only$Sex.ratio)
+W_only_s  <- as.integer(W_only$Sex.ratio)
+
+
+label=c('All TRT',"BW","V","W") # labels for Axis
+boxplot(total_s,BW_only_s,V_only_m,W_only_s, 
+        main = 'Sex Ratio Comparison',
+        names=label)
+
+
+
+```
+
+```{r}
+#rebuilding the data frame (fixing chr to int)
+
+total_f  <- as.integer(Clean_data$Total.females)
+total_m  <- as.integer(Clean_data$Total.males)
+total_s  <- as.integer(Clean_data$Sex.ratio)
+
+Treatment <- Clean_data$Trt
+Longevity <- Clean_data$Longevity
+Total_Offspring <- Clean_data$Total.offspring
+Total_Female <- total_f
+Total_Male <- total_m
+Sex_ratio <- total_s
+data1 <- data.frame(Treatment, Total_Male, Total_Female, Total_Offspring , Longevity, Sex_ratio )
+
+#remove na in r - remove rows - na.omit function / option
+#data1 <- na.omit(data1)
+
+attach(data1)
+
+```
+
+
+
+
+```{r}
+#One-way Anova test (Total_Offspring) , significant
+results1 <- aov(Total_Offspring ~ Treatment)
+summary(results1) 
+
+#check model assumptions (Independence, normality, Constant var.)
+plot(results1)
+
+#Constant variance didn't seem to match as the data increases (fans out) .
+
+#Check Boxcox to see if we need to transform
+bc =  boxcox(results1)
+#best.lam = bc$x[which(bc$y==max(bc$y))] #best lambda value = -0.30303 
+#using log transformation to keep it simple
+
+#transforming data
+results1 <- aov((log(Total_Offspring)) ~ Treatment)
+summary(results1) 
+
+#check model assumptions (Independence, normality, Constant var.)
+plot(results1)
+
+
+# since the Treatment effect is significant, we further did the post hoc test using Tukey
+# adjustment to determine which mean differences are significant, and which are not.
+TukeyHSD(results1, conf.level = 0.95) 
+emmeans(results1,list(pairwise ~ Treatment)) 
+
+#Based on our test, we can conclude that W-BW (Water only - Buckwheat) and W-V (Water only - Vetch) are significantly significant while BW - V (Buckwheat - Vetch) is insignificant when affecting total offspring. 
+
+
+```
+
+```{r}
+#One-way Anova test (Longevity) , significant
+results2 <- aov(Longevity ~ Treatment)
+summary(results2) 
+
+#check model assumptions (Independence, normality, Constant var.)
+plot(results2)
+
+# meets the assumption, there just seems to be one huge outlier
+
+
+#Check Boxcox to see if we need to transform
+bc =  boxcox(results2)
+#best.lam = bc$x[which(bc$y==max(bc$y))] #best lambda value = -0.3838384 
+#dont need to transform
+
+
+# since the Treatment effect is significant, we further did the post hoc test using Tukey
+# adjustment to determine which mean differences are significant, and which are not.
+TukeyHSD(results2, conf.level = 0.95) 
+emmeans(results2,list(pairwise ~ Treatment)) 
+
+#Based on our test, we can conclude that W-BW (Water only - Buckwheat) and W-V (Water only - Vetch) are significantly significant while BW - V (Buckwheat - Vetch) is insignificant when affecting longevity. 
+
+```
+```{r}
+#One-way Anova test (Sex Ratio)  ,insignificant
+results3 <- aov(Sex_ratio ~ Treatment)
+summary(results3) 
+
+#check model assumptions (Independence, normality, Constant var.)
+plot(results3)
+
+
+#The variances is not constant as it seems like its decreasing and qqplot is not linear so we cannot check normality. we have to transform the data.We use boxcox to try to see how to transform the data.
+bc =  boxcox(results3)
+#best.lam = bc$x[which(bc$y==max(bc$y))] #best lambda value = 1.515152
+#using  lambda = 1.5 to keep it simple
+
+#transforming data
+results3 <- aov((Sex_ratio^1.5) ~ Treatment) 
+summary(results3) 
+
+#check model assumptions (Independence, normality, Constant var.)
+plot(results3)
+
+# Since the treatment effect is insignificant, we don't need to do a post hoc test and can conclude that that treatment is insignificant to sex ratio.
+
+
+
+```
+
+
+```{r}
+#One-way Anova test (Total_Male) , significant
+results4 <- aov(Total_Male ~ Treatment)
+summary(results4) 
+
+#check model assumptions (Independence, normality, Constant var.)
+plot(results4)
+
+#constant var. seems to be increasing (fanning out), normality also is not fully met
+
+#we can see if we need to transform the data
+bc =  boxcox(results4)
+#best.lam = bc$x[which(bc$y==max(bc$y))] #best lambda value = -0.2626263
+#we will use log transformaion to keep it simple.
+
+#transforming data
+results4 <- aov((log(Total_Male)) ~ Treatment) 
+summary(results4) 
+
+#check model assumptions (Independence, normality, Constant var.)
+plot(results4)
+
+# since the Treatment effect is significant, we further did the post hoc test using Tukey
+# adjustment to determine which mean differences are significant, and which are not.
+TukeyHSD(results4, conf.level = 0.95) 
+emmeans(results4,list(pairwise ~ Treatment)) 
+
+#Based on our test, we can conclude that W-BW (Water only - Buckwheat) is  significantly significant while BW - V (Buckwheat - Vetch) and W-V (Water only - Vetch) are insignificant when affecting total male offspring. 
+
+
+```
+
+```{r}
+#One-way Anova test (Total_Female) , insignificant
+results5 <- aov(Total_Female ~ Treatment)
+summary(results5) 
+
+#check model assumptions (Independence, normality, Constant var.)
+plot(results5)
+
+
+#Check Boxcox to see if we need to transform
+bc =  boxcox(results5)
+#best.lam = bc$x[which(bc$y==max(bc$y))] #best lambda value = 0.5454545 
+#transform with lambda = 0.5, keep it simple
+
+#transforming data
+results5 <- aov((Total_Female^0.5) ~ Treatment) 
+summary(results5) 
+
+#check model assumptions (Independence, normality, Constant var.)
+plot(results5)
+
+
+# Since the treatment effect is insignificant, we don't need to do a post hoc test and can conclude that that  treatment is insignificant to total female offspring.
+
+```
